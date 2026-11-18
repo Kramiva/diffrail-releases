@@ -1,0 +1,37 @@
+name: Update the website
+
+# Writes the latest published release into diffrail-website's src/data/release.json and pushes it to main,
+# which makes Hostinger redeploy diffrail.com with the download buttons.
+on:
+  release:
+    types: [published, edited, deleted, unpublished, prereleased]
+  workflow_dispatch:
+
+concurrency: update-website
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Kramiva/diffrail-website
+          token: ${{ secrets.WEBSITE_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read the latest release
+        run: node scripts/sync-release.mjs "$GITHUB_REPOSITORY"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Push it to the website if it changed
+        run: |
+          if git diff --quiet -- src/data/release.json; then echo "Nothing changed"; exit 0; fi
+          version=$(node -p "require('./src/data/release.json')?.version ?? 'no release'")
+          git config user.name "diffrail-releases"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Show Diffrail $version on the website" -- src/data/release.json
+          git push
